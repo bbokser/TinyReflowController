@@ -178,15 +178,16 @@ typedef enum REFLOW_PROFILE
 // ***** GENERAL PROFILE CONSTANTS *****
 #define PROFILE_TYPE_ADDRESS 0
 #define TEMPERATURE_ROOM 50
-#define TEMPERATURE_SOAK_MIN 150
+#define TEMPERATURE_SOAK_MIN 125  // default=150, make sure this is <= soak max
 #define TEMPERATURE_COOL_MIN 100
 #define SENSOR_SAMPLING_TIME 1000
 #define SOAK_TEMPERATURE_STEP 5
+#define UNDERSHOOT_COMP 5
 
 // ***** LEAD FREE PROFILE CONSTANTS *****
-#define TEMPERATURE_SOAK_MAX_LF 130
-#define TEMPERATURE_REFLOW_MAX_LF 175
-#define SOAK_MICRO_PERIOD_LF 9000
+#define TEMPERATURE_SOAK_MAX_LF 130  // changed
+#define TEMPERATURE_REFLOW_MAX_LF 175  // changed
+#define SOAK_MICRO_PERIOD_LF 16000  // changed from 9000
 
 // ***** LEADED PROFILE CONSTANTS *****
 #define TEMPERATURE_SOAK_MAX_PB 180
@@ -202,7 +203,7 @@ typedef enum REFLOW_PROFILE
 // ***** PID PARAMETERS *****
 // ***** PRE-HEAT STAGE *****
 #define PID_KP_PREHEAT 100
-#define PID_KI_PREHEAT 0.025
+#define PID_KI_PREHEAT 0.05  // increased from 0.025
 #define PID_KD_PREHEAT 20
 // ***** SOAKING STAGE *****
 #define PID_KP_SOAK 300
@@ -605,7 +606,8 @@ void loop()
           // Initialize PID control window starting time
           windowStartTime = millis();
           // Ramp up to minimum soaking temperature
-          setpoint = TEMPERATURE_SOAK_MIN;
+          // Add undershoot comp term to setpoint
+          setpoint = TEMPERATURE_SOAK_MIN + UNDERSHOOT_COMP;
           // Load profile specific constant
           if (reflowProfile == REFLOW_PROFILE_LEADFREE)
           {
@@ -657,8 +659,9 @@ void loop()
         {
           // Set agressive PID parameters for reflow ramp
           reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
-          // Ramp up to first section of soaking temperature
-          setpoint = reflowTemperatureMax;
+          // Ramp up to reflow temperature
+          // Add undershoot comp term to setpoint
+          setpoint = reflowTemperatureMax + UNDERSHOOT_COMP;
           // Proceed to reflowing state
           reflowState = REFLOW_STATE_REFLOW;
         }
@@ -666,9 +669,7 @@ void loop()
       break;
 
     case REFLOW_STATE_REFLOW:
-      // We need to avoid hovering at peak temperature for too long
-      // Crude method that works like a charm and safe for the components
-      if (input >= (reflowTemperatureMax - 5))
+      if (input >= (reflowTemperatureMax))
       {
         // Set PID parameters for cooling ramp
         reflowOvenPID.SetTunings(PID_KP_REFLOW, PID_KI_REFLOW, PID_KD_REFLOW);
